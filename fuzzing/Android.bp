@@ -6,15 +6,16 @@ package {
 cc_fuzz {
     name: "libfdt_fuzzer",
     srcs: [
-        "libfdt_fuzzer.cpp",
+        "libfdt_fuzzer.c",
     ],
     static_libs: [
         "libfdt",
     ],
-    host_supported: true,
+    corpus: ["corpus/*"],
     fuzz_config: {
         cc: [
             "ptosi@google.com",
         ],
     },
+    host_supported: true,
 }
