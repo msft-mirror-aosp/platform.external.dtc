@@ -5,6 +5,17 @@ COPTS = [
     "-Wno-missing-field-initializers",
     "-Wno-sign-compare",
     "-Wno-unused-parameter",
+    "-Wno-unsafe-buffer-usage",
+    "-Wno-bad-function-cast",
+    "-Wno-sign-conversion",
+    "-Wno-zero-length-array",
+    "-Wno-documentation-unknown-command",
+    "-Wno-extra-semi",
+    "-Wno-extra-semi-stmt",
+    "-Wno-shorten-64-to-32",
+    "-Wno-implicit-int-conversion",
+    "-Wno-cast-align",
+    "-Wno-reserved-macro-identifier",
 ]
 
 cc_library(
@@ -42,12 +53,12 @@ UTILS = [
 
 genrule(
     name = "version_gen_header",
-    outs = ["version_gen.h"],
     srcs = [
         "METADATA",
         "METADATA_version.sed",
         "version_gen.h.in",
     ],
+    outs = ["version_gen.h"],
     cmd = """
       version="$$(sed -f $(location METADATA_version.sed) -n $(location METADATA))-Android-build"
       sed s/@VCS_TAG@/$${version}/ $(location version_gen.h.in) > $@
@@ -57,8 +68,6 @@ genrule(
 cc_binary(
     name = "dtc",
     srcs = UTILS + [
-        ":dtc_lexer_srcs",
-        ":dtc_parser_srcs",
         "checks.c",
         "data.c",
         "dtc.c",
@@ -69,6 +78,8 @@ cc_binary(
         "srcpos.c",
         "srcpos.h",
         "treesource.c",
+        ":dtc_lexer_srcs",
+        ":dtc_parser_srcs",
     ],
     copts = COPTS,
     defines = ["NO_YAML"],
