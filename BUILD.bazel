@@ -26,6 +26,7 @@ cc_library(
     ]),
     copts = COPTS,
     includes = ["libfdt"],
+    visibility = ["//visibility:public"],
 )
 
 genrule(
@@ -123,5 +124,6 @@ cc_binary(
     ],
     copts = COPTS,
     defines = ["NO_YAML"],
+    visibility = ["//visibility:public"],
     deps = [":libfdt"],
 )
