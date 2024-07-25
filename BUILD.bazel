@@ -16,6 +16,7 @@ COPTS = [
     "-Wno-implicit-int-conversion",
     "-Wno-cast-align",
     "-Wno-reserved-macro-identifier",
+    "-Wno-switch-default",
 ]
 
 cc_library(
