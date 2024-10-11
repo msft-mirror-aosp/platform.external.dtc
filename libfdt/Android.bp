@@ -35,7 +35,10 @@ cc_library {
 
 cc_library {
     name: "libfdt_baremetal",
-    defaults: ["libfdt_defaults"],
+    defaults: [
+        "cc_baremetal_defaults",
+        "libfdt_defaults",
+    ],
     // b/336916369: This library gets linked into a rust rlib.  Disable LTO
     // until cross-language lto is supported.
     lto: {
