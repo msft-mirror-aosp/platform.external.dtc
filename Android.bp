@@ -154,3 +154,9 @@ genrule {
         ")-Android-build;" +
         "sed s/@VCS_TAG@/$${version}/ $(in) > $(out)",
 }
+
+dirgroup {
+    name: "trusty_dirgroup_external_dtc",
+    dirs: ["."],
+    visibility: ["//trusty/vendor/google/aosp/scripts"],
+}
