@@ -100,6 +100,10 @@ cc_binary {
     name: "dtc_static",
     defaults: ["dtc_defaults"],
     static_executable: true,
+    // TODO(b/373646042): this is a workaround for failed link
+    sanitize: {
+        hwaddress: false,
+    },
     installable: false, // test only
 }
 
