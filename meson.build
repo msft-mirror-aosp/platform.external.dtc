@@ -1,7 +1,8 @@
 project('dtc', 'c',
-  version: '1.6.0',
+  version: files('VERSION.txt'),
   license: ['GPL2+', 'BSD-2'],
-  default_options: 'werror=true',
+  default_options: ['werror=true', 'default_library=both'],
+  meson_version: '>=0.57.0'
 )
 
 cc = meson.get_compiler('c')
@@ -14,33 +15,21 @@ add_project_arguments(
     '-Wstrict-prototypes',
     '-Wmissing-prototypes',
     '-Wredundant-decls',
-    '-Wshadow'
+    '-Wshadow',
+    '-Wsuggest-attribute=format',
+    '-Wwrite-strings',
+    '-Wdiscarded-qualifiers',
   ]),
   language: 'c'
 )
-
-if host_machine.system() == 'windows'
-  add_project_arguments(
-    '-D__USE_MINGW_ANSI_STDIO=1',
-    language: 'c'
-  )
-endif
 
 add_project_arguments(
   '-DFDT_ASSUME_MASK=' + get_option('assume-mask').to_string(),
   language: 'c'
 )
 
-if get_option('static-build')
-  static_build = true
-  extra_link_args = ['-static']
-else
-  static_build = false
-  extra_link_args = []
-endif
-
 yamltree = 'yamltree.c'
-yaml = dependency('yaml-0.1', required: get_option('yaml'), static: static_build)
+yaml = dependency('yaml-0.1', version: '>=0.2.3', required: get_option('yaml'))
 if not yaml.found()
   add_project_arguments('-DNO_YAML', language: 'c')
   yamltree = []
@@ -54,23 +43,27 @@ endif
 py = import('python')
 py = py.find_installation(required: get_option('python'))
 swig = find_program('swig', required: get_option('python'))
+pylibfdt_enabled = not meson.is_cross_build() and py.found() and swig.found() ? true : false
+wheel_only = get_option('wheel-only')
 
 version_gen_h = vcs_tag(
+  command: ['git', 'describe', '--dirty=+'],
   input: 'version_gen.h.in',
   output: 'version_gen.h',
 )
 
 subdir('libfdt')
 
-if get_option('tools')
+dtc_tools = []
+util_dep = declare_dependency(
+  sources: ['util.c', version_gen_h],
+  include_directories: '.',
+  dependencies: libfdt_dep
+)
+
+if get_option('tools') and not wheel_only
   flex = find_program('flex', required: true)
   bison = find_program('bison', required: true)
-
-  util_dep = declare_dependency(
-    sources: ['util.c', version_gen_h],
-    include_directories: '.',
-    dependencies: libfdt_dep
-  )
 
   lgen = generator(
     flex,
@@ -85,7 +78,7 @@ if get_option('tools')
   )
 
   if cc.check_header('fnmatch.h')
-    executable(
+    dtc_tools += executable(
       'convert-dtsv0',
       [
         lgen.process('convert-dtsv0-lexer.l'),
@@ -93,11 +86,10 @@ if get_option('tools')
       ],
       dependencies: util_dep,
       install: true,
-      link_args: extra_link_args,
     )
   endif
 
-  executable(
+  dtc_tools += executable(
     'dtc',
     [
       lgen.process('dtc-lexer.l'),
@@ -114,26 +106,27 @@ if get_option('tools')
     ],
     dependencies: [util_dep, yaml],
     install: true,
-    link_args: extra_link_args,
   )
 
   foreach e: ['fdtdump', 'fdtget', 'fdtput', 'fdtoverlay']
-    executable(e, files(e + '.c'), dependencies: util_dep, install: true, link_args: extra_link_args)
+    dtc_tools += executable(e, files(e + '.c'), dependencies: util_dep, install: true)
   endforeach
 
   install_data(
     'dtdiff',
-    install_dir: get_option('prefix') / get_option('bindir'),
+    install_dir: get_option('bindir'),
     install_mode: 'rwxr-xr-x',
   )
 endif
 
-if not meson.is_cross_build()
-  if py.found() and swig.found()
-    subdir('pylibfdt')
-  endif
+foreach e: dtc_tools
+  meson.override_find_program(e.name(), e)
+endforeach
 
-  if get_option('tools')
-    subdir('tests')
-  endif
+if pylibfdt_enabled
+  subdir('pylibfdt')
+endif
+
+if get_option('tests')
+  subdir('tests')
 endif

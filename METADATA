@@ -1,25 +1,25 @@
 # This project was upgraded with external_updater.
 # Usage: tools/external_updater/updater.sh update external/dtc
-# For more info, check https://cs.android.com/android/platform/superproject/+/main:tools/external_updater/README.md
+# For more info, check https://cs.android.com/android/platform/superproject/main/+/main:tools/external_updater/README.md
 
 name: "dtc"
 description: "Device tree compiler tools (dtc) and libfdt."
 third_party {
   license_type: RESTRICTED
+  security {
+    tag: "android:on_device_usage"
+    tag: "android:privilege_level:privileged"
+    tag: "android:untrusted_input"
+  }
   last_upgrade_date {
-    year: 2024
-    month: 3
-    day: 26
+    year: 2026
+    month: 10
+    day: 13
   }
   identifier {
     type: "Git"
     value: "https://git.kernel.org/pub/scm/utils/dtc/dtc.git"
-    version: "039a99414e778332d8f9c04cbd3072e1dcc62798"
-    closest_version: "v1.7.0"
-  }
-  security: {
-    tag: "android:on_device_usage"
-    tag: "android:privilege_level:privileged"
-    tag: "android:untrusted_input"
+    version: "8f48565e5cfedc74d3f7512f1e0188e9d85dc1de"
+    closest_version: "v1.8.1"
   }
 }

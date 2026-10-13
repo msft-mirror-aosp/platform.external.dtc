@@ -5,7 +5,9 @@
  * Copyright (C) 2006 David Gibson, IBM Corporation.
  */
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE /* for strsignal() in glibc.  FreeBSD has it either way */
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,7 +19,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#if NO_VALGRIND
+#ifdef NO_VALGRIND
 static inline void VALGRIND_MAKE_MEM_UNDEFINED(void *p, size_t len)
 {
 }
@@ -129,7 +131,7 @@ void check_property(void *fdt, int nodeoffset, const char *name,
 		     " differs from stored length (%d != %d)",
 		     name, retlen, proplen);
 	if (proplen != len)
-		FAIL("Size mismatch on property \"%s\": %d insead of %d",
+		FAIL("Size mismatch on property \"%s\": %d instead of %d",
 		     name, proplen, len);
 	if (len && memcmp(val, prop->data, len) != 0)
 		FAIL("Data mismatch on property \"%s\"", name);
@@ -146,7 +148,7 @@ const void *check_getprop(void *fdt, int nodeoffset, const char *name,
 		FAIL("fdt_getprop(\"%s\"): %s", name, fdt_strerror(proplen));
 
 	if (proplen != len)
-		FAIL("Size mismatch on property \"%s\": %d insead of %d",
+		FAIL("Size mismatch on property \"%s\": %d instead of %d",
 		     name, proplen, len);
 	if (len && memcmp(val, propval, len) != 0)
 		FAIL("Data mismatch on property \"%s\"", name);
@@ -170,7 +172,7 @@ const void *check_get_prop_offset(void *fdt, int poffset, const char *exp_name,
 		return NULL;
 
 	if (proplen != exp_len)
-		FAIL("Size mismatch on property \"%s\": %d insead of %d",
+		FAIL("Size mismatch on property \"%s\": %d instead of %d",
 		     name, proplen, exp_len);
 	if (exp_len && memcmp(exp_val, propval, exp_len))
 		FAIL("Data mismatch on property \"%s\"", name);
@@ -338,19 +340,14 @@ void save_blob(const char *filename, void *fdt)
 	free(tmp);
 }
 
-void *open_blob_rw(void *blob)
+void *open_blob_rw(const void *blob)
 {
 	int err;
-	void *buf = blob;
+	void *buf;
+	int newsize = fdt_totalsize(blob) + 8;
 
-	err = fdt_open_into(blob, buf, fdt_totalsize(blob));
-	if (err == -FDT_ERR_NOSPACE) {
-		/* Ran out of space converting to v17 */
-		int newsize = fdt_totalsize(blob) + 8;
-
-		buf = xmalloc(newsize);
-		err = fdt_open_into(blob, buf, newsize);
-	}
+	buf = xmalloc(newsize);
+	err = fdt_open_into(blob, buf, newsize);
 	if (err)
 		FAIL("fdt_open_into(): %s", fdt_strerror(err));
 	return buf;
