@@ -114,11 +114,14 @@ def check_err_null(val, quiet=()):
         FdtException if val indicates an error was reported and the error
         is not in @quiet.
     """
-    # Normally a list is returned which contains the data and its length.
-    # If we get just an integer error code, it means the function failed.
+    # Compatibility for SWIG v4.2 and earlier. SWIG 4.2 would drop the first
+    # item from the list if it was None, returning only the second item.
     if not isinstance(val, list):
-        if -val not in quiet:
-            raise FdtException(val)
+        val = [None, val]
+
+    if val[0] is None:
+        if -val[1] not in quiet:
+            raise FdtException(val[1])
     return val
 
 class FdtRo(object):
@@ -159,7 +162,7 @@ class FdtRo(object):
             quiet: Errors to ignore (empty to raise on all errors)
 
         Returns:
-            Typle:
+            Tuple:
                 Offset of the next node, if any, else a -ve error
                 Depth of the returned node, if any, else undefined
 
@@ -295,7 +298,9 @@ class FdtRo(object):
         Returns:
             Number of memory reserve-map records
         """
-        return check_err(fdt_get_mem_rsv(self._fdt, index), quiet)
+        val = fdt_get_mem_rsv(self._fdt, index)
+        check_err(val[0], quiet)
+        return val[1:]
 
     def subnode_offset(self, parentoffset, name, quiet=()):
         """Get the offset of a named subnode
@@ -393,8 +398,8 @@ class FdtRo(object):
         """
         pdata = check_err_null(
                 fdt_get_property_by_offset(self._fdt, prop_offset), quiet)
-        if isinstance(pdata, (int)):
-            return pdata
+        if pdata[0] is None:
+            return pdata[1]
         return Property(pdata[0], pdata[1])
 
     def getprop(self, nodeoffset, prop_name, quiet=()):
@@ -415,9 +420,38 @@ class FdtRo(object):
         """
         pdata = check_err_null(fdt_getprop(self._fdt, nodeoffset, prop_name),
                                quiet)
-        if isinstance(pdata, (int)):
-            return pdata
+        if pdata[0] is None:
+            return pdata[1]
         return Property(prop_name, bytearray(pdata[0]))
+
+    def hasprop(self, nodeoffset, prop_name, quiet=()):
+        """Check if a node has a property
+
+        This can be used to check boolean properties
+
+        Args:
+            nodeoffset: Node offset containing property to check
+            prop_name: Name of property to check
+            quiet: Errors to ignore (empty to raise on all errors). Note that
+                NOTFOUND is added internally by this function so need not be
+                provided
+
+        Returns:
+            True if the property exists in the node, else False. If an error
+                other than -NOTFOUND is returned by fdt_getprop() then the error
+                is return (-ve integer)
+
+        Raises:
+            FdtError if any error occurs other than NOTFOUND (e.g. the
+                nodeoffset is invalid)
+        """
+        pdata = check_err_null(fdt_getprop(self._fdt, nodeoffset, prop_name),
+                               quiet + (NOTFOUND,))
+        if pdata[0] is None:
+            if pdata[1] == -NOTFOUND:
+                return False
+            return pdata[1]
+        return True
 
     def get_phandle(self, nodeoffset):
         """Get the phandle of a node
@@ -604,6 +638,32 @@ class Fdt(FdtRo):
         """
         return check_err(fdt_setprop(self._fdt, nodeoffset, prop_name, val,
                                      len(val)), quiet)
+
+    def setprop_bool(self, nodeoffset, prop_name, val, quiet=()):
+        """Set the boolean value of a property
+
+        Either:
+            adds the property if not already present; or
+            deletes the property if present
+
+        Args:
+            nodeoffset: Node offset containing the property to create/delete
+            prop_name: Name of property
+            val: Boolean value to write (i.e. True or False)
+            quiet: Errors to ignore (empty to raise on all errors)
+
+        Returns:
+            Error code, or 0 if OK
+
+        Raises:
+            FdtException if no parent found or other error occurs
+        """
+        exists = self.hasprop(nodeoffset, prop_name, quiet)
+        if val != exists:
+            if val:
+                return self.setprop(nodeoffset, prop_name, b'', quiet=quiet)
+            else:
+                return self.delprop(nodeoffset, prop_name, quiet=quiet)
 
     def setprop_u32(self, nodeoffset, prop_name, val, quiet=()):
         """Set the value of a property
@@ -1080,7 +1140,7 @@ typedef uint32_t fdt32_t;
 			fdt_string(fdt1, fdt32_to_cpu($1->nameoff)));
 		buff = PyByteArray_FromStringAndSize(
 			(const char *)($1 + 1), fdt32_to_cpu($1->len));
-		resultobj = SWIG_Python_AppendOutput(resultobj, buff);
+		resultobj = SWIG_AppendOutput(resultobj, buff);
 	}
 }
 
@@ -1121,7 +1181,7 @@ typedef uint32_t fdt32_t;
 
 %typemap(argout) int *depth {
         PyObject *val = Py_BuildValue("i", *arg$argnum);
-        resultobj = SWIG_Python_AppendOutput(resultobj, val);
+        resultobj = SWIG_AppendOutput(resultobj, val);
 }
 
 %apply int *depth { int *depth };
@@ -1133,12 +1193,7 @@ typedef uint32_t fdt32_t;
 
 %typemap(argout) uint64_t * {
         PyObject *val = PyLong_FromUnsignedLongLong(*arg$argnum);
-        if (!result) {
-           if (PyTuple_GET_SIZE(resultobj) == 0)
-              resultobj = val;
-           else
-              resultobj = SWIG_Python_AppendOutput(resultobj, val);
-        }
+        resultobj = SWIG_AppendOutput(resultobj, val);
 }
 
 %include "cstring.i"

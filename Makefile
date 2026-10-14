@@ -3,16 +3,17 @@
 # Device Tree Compiler
 #
 
+$(warning WARNING: Building dtc using make is deprecated, in favour of using Meson (https://mesonbuild.com))
+$(warning )
+$(warning Use `meson setup builddir/ && meson compile -C builddir/` to build, `meson test -C builddir/` to test, or `meson configure` to see build options.)
+
 #
 # Version information will be constructed in this order:
-# EXTRAVERSION might be "-rc", for example.
+# DTC_VERSION release version as MAJOR.MINOR.PATCH
 # LOCAL_VERSION is likely from command line.
 # CONFIG_LOCALVERSION from some future config system.
 #
-VERSION = 1
-PATCHLEVEL = 7
-SUBLEVEL = 0
-EXTRAVERSION =
+DTC_VERSION = $(shell cat VERSION.txt)
 LOCAL_VERSION =
 CONFIG_LOCALVERSION =
 
@@ -22,16 +23,19 @@ ASSUME_MASK ?= 0
 
 CPPFLAGS = -I libfdt -I . -DFDT_ASSUME_MASK=$(ASSUME_MASK)
 WARNINGS = -Wall -Wpointer-arith -Wcast-qual -Wnested-externs -Wsign-compare \
-	-Wstrict-prototypes -Wmissing-prototypes -Wredundant-decls -Wshadow
+	-Wstrict-prototypes -Wmissing-prototypes -Wredundant-decls -Wshadow \
+	-Wwrite-strings
+ifeq ($(shell $(CC) --version | grep -q gcc && echo gcc),gcc)
+WARNINGS += -Wsuggest-attribute=format
+endif
 CFLAGS = -g -Os $(SHAREDLIB_CFLAGS) -Werror $(WARNINGS) $(EXTRA_CFLAGS)
 
 BISON = bison
 LEX = flex
 SWIG = swig
 PKG_CONFIG ?= pkg-config
-PYTHON ?= python3
 
-INSTALL = /usr/bin/install
+INSTALL = install
 INSTALL_PROGRAM = $(INSTALL)
 INSTALL_LIB = $(INSTALL)
 INSTALL_DATA = $(INSTALL) -m 644
@@ -45,8 +49,6 @@ INCLUDEDIR = $(PREFIX)/include
 HOSTOS := $(shell uname -s | tr '[:upper:]' '[:lower:]' | \
 	    sed -e 's/\(cygwin\|msys\).*/\1/')
 
-NO_PYTHON ?= 0
-
 NO_VALGRIND := $(shell $(PKG_CONFIG) --exists valgrind; echo $$?)
 ifeq ($(NO_VALGRIND),1)
 	CPPFLAGS += -DNO_VALGRIND
@@ -54,13 +56,19 @@ else
 	CFLAGS += $(shell $(PKG_CONFIG) --cflags valgrind)
 endif
 
-NO_YAML := $(shell $(PKG_CONFIG) --exists yaml-0.1; echo $$?)
+# libyaml before version 0.2.3 expects non-const string parameters. Supporting
+# both variants would require either cpp magic or passing
+# -Wno-error=discarded-qualifiers to the compiler. For the sake of simplicity
+# just support libyaml >= 0.2.3.
+NO_YAML := $(shell $(PKG_CONFIG) --atleast-version 0.2.3 yaml-0.1; echo $$?)
 ifeq ($(NO_YAML),1)
 	CFLAGS += -DNO_YAML
 else
 	LDLIBS_dtc += $(shell $(PKG_CONFIG) --libs yaml-0.1)
 	CFLAGS += $(shell $(PKG_CONFIG) --cflags yaml-0.1)
 endif
+
+HAS_VERSION_SCRIPT := $(shell echo 'int main(){}' | $(CC) -Wl,--version-script=/dev/null -x c - -o /dev/null 2>/dev/null && echo y)
 
 ifeq ($(HOSTOS),darwin)
 SHAREDLIB_EXT     = dylib
@@ -69,11 +77,15 @@ SHAREDLIB_LDFLAGS = -fPIC -dynamiclib -Wl,-install_name -Wl,
 else ifeq ($(HOSTOS),$(filter $(HOSTOS),msys cygwin))
 SHAREDLIB_EXT     = so
 SHAREDLIB_CFLAGS  =
-SHAREDLIB_LDFLAGS = -shared -Wl,--version-script=$(LIBFDT_version) -Wl,-soname,
+SHAREDLIB_LDFLAGS = -shared -Wl,-soname,
 else
 SHAREDLIB_EXT     = so
 SHAREDLIB_CFLAGS  = -fPIC
-SHAREDLIB_LDFLAGS = -fPIC -shared -Wl,--version-script=$(LIBFDT_version) -Wl,-soname,
+SHAREDLIB_LDFLAGS = -fPIC -shared -Wl,-soname,
+endif
+
+ifeq ($(HAS_VERSION_SCRIPT),y)
+SHAREDLIB_LDFLAGS += -Wl,--version-script=$(LIBFDT_version)
 endif
 
 #
@@ -98,7 +110,6 @@ endif
 # Rules for versioning
 #
 
-DTC_VERSION = $(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)
 VERSION_FILE = version_gen.h
 
 CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
@@ -142,6 +153,11 @@ include Makefile.convert-dtsv0
 include Makefile.dtc
 include Makefile.utils
 
+# Flex-generated source triggers -Wsign-compare in its templates
+dtc-lexer.lex.o: CFLAGS += -Wno-sign-compare
+convert-dtsv0-lexer.lex.o: CFLAGS += -Wno-sign-compare
+
+
 BIN += convert-dtsv0
 BIN += dtc
 BIN += fdtdump
@@ -152,29 +168,6 @@ BIN += fdtoverlay
 SCRIPTS = dtdiff
 
 all: $(BIN) libfdt
-
-# We need both Python and swig to build/install pylibfdt.
-# This builds the given make ${target} if those deps are found.
-check_python_deps = \
-	if $(PKG_CONFIG) --cflags $(PYTHON) >/dev/null 2>&1; then \
-		if which swig >/dev/null 2>&1; then \
-			can_build=yes; \
-		fi; \
-	fi; \
-	if [ "$${can_build}" = "yes" ]; then \
-		$(MAKE) $${target}; \
-	else \
-		echo "\#\# Skipping pylibfdt (install python dev and swig to build)"; \
-	fi ;
-
-.PHONY: maybe_pylibfdt
-maybe_pylibfdt: FORCE
-	target=pylibfdt; $(check_python_deps)
-
-ifeq ($(NO_PYTHON),0)
-all: maybe_pylibfdt
-endif
-
 
 ifneq ($(DEPTARGETS),)
 ifneq ($(MAKECMDGOALS),libfdt)
@@ -217,6 +210,7 @@ $(LIBFDT_lib): $(addprefix $(LIBFDT_dir)/,$(LIBFDT_OBJS)) $(LIBFDT_version)
 	$(CC) $(LDFLAGS) $(SHAREDLIB_LDFLAGS)$(LIBFDT_soname) -o $(LIBFDT_lib) \
 		$(addprefix $(LIBFDT_dir)/,$(LIBFDT_OBJS))
 	ln -sf $(LIBFDT_LIB) $(LIBFDT_dir)/$(LIBFDT_soname)
+	ln -sf $(LIBFDT_soname) $(LIBFDT_dir)/$(LIBFDT_so)
 
 ifneq ($(DEPTARGETS),)
 -include $(LIBFDT_OBJS:%.o=$(LIBFDT_dir)/%.d)
@@ -233,7 +227,7 @@ install-bin: all $(SCRIPTS)
 	$(INSTALL_PROGRAM) $(BIN) $(DESTDIR)$(BINDIR)
 	$(INSTALL_SCRIPT) $(SCRIPTS) $(DESTDIR)$(BINDIR)
 
-install-lib: all
+install-lib: libfdt
 	@$(VECHO) INSTALL-LIB
 	$(INSTALL) -d $(DESTDIR)$(LIBDIR)
 	$(INSTALL_LIB) $(LIBFDT_lib) $(DESTDIR)$(LIBDIR)
@@ -247,14 +241,6 @@ install-includes:
 	$(INSTALL_DATA) $(LIBFDT_include) $(DESTDIR)$(INCLUDEDIR)
 
 install: install-bin install-lib install-includes
-
-.PHONY: maybe_install_pylibfdt
-maybe_install_pylibfdt: FORCE
-	target=install_pylibfdt; $(check_python_deps)
-
-ifeq ($(NO_PYTHON),0)
-install: maybe_install_pylibfdt
-endif
 
 $(VERSION_FILE): Makefile FORCE
 	$(call filechk,version)
@@ -274,39 +260,6 @@ fdtput:	$(FDTPUT_OBJS) $(LIBFDT_dep)
 
 fdtoverlay: $(FDTOVERLAY_OBJS) $(LIBFDT_dep)
 
-dist:
-	git archive --format=tar --prefix=dtc-$(dtc_version)/ HEAD \
-		> ../dtc-$(dtc_version).tar
-	cat ../dtc-$(dtc_version).tar | \
-		gzip -9 > ../dtc-$(dtc_version).tar.gz
-
-
-#
-# Rules for pylibfdt
-#
-PYLIBFDT_dir = pylibfdt
-
-include $(PYLIBFDT_dir)/Makefile.pylibfdt
-
-.PHONY: pylibfdt
-pylibfdt: $(PYLIBFDT_dir)/_libfdt.so
-
-#
-# Release signing and uploading
-# This is for maintainer convenience, don't try this at home.
-#
-ifeq ($(MAINTAINER),y)
-GPG = gpg2
-KUP = kup
-KUPDIR = /pub/software/utils/dtc
-
-kup: dist
-	$(GPG) --detach-sign --armor -o ../dtc-$(dtc_version).tar.sign \
-		../dtc-$(dtc_version).tar
-	$(KUP) put ../dtc-$(dtc_version).tar.gz ../dtc-$(dtc_version).tar.sign \
-		$(KUPDIR)/dtc-$(dtc_version).tar.gz
-endif
-
 tags: FORCE
 	rm -f tags
 	find . \( -name tests -type d -prune \) -o \
@@ -324,9 +277,6 @@ TESTS_BIN += fdtput
 TESTS_BIN += fdtget
 TESTS_BIN += fdtdump
 TESTS_BIN += fdtoverlay
-ifeq ($(NO_PYTHON),0)
-TESTS_PYLIBFDT += maybe_pylibfdt
-endif
 
 ifneq ($(MAKECMDGOALS),libfdt)
 include tests/Makefile.tests
@@ -338,7 +288,7 @@ endif
 STD_CLEANFILES = *~ *.o *.$(SHAREDLIB_EXT) *.d *.a *.i *.s core a.out vgcore.* \
 	*.tab.[ch] *.lex.c *.output
 
-clean: libfdt_clean pylibfdt_clean tests_clean
+clean: libfdt_clean tests_clean
 	@$(VECHO) CLEAN
 	rm -f $(STD_CLEANFILES)
 	rm -f $(VERSION_FILE)
@@ -358,7 +308,7 @@ clean: libfdt_clean pylibfdt_clean tests_clean
 
 %.o: %.S
 	@$(VECHO) AS $@
-	$(CC) $(CPPFLAGS) $(AFLAGS) -D__ASSEMBLY__ -o $@ -c $<
+	$(CC) $(CPPFLAGS) $(AFLAGS) -o $@ -c $<
 
 %.d: %.c
 	@$(VECHO) DEP $<
