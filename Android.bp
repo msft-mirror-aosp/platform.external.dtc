@@ -154,15 +154,20 @@ sh_binary_host {
 genrule {
     name: "dtc_version_gen.h",
     out: ["version_gen.h"],
+    srcs: ["VERSION.txt"],
+    tool_files: [":dtc_version_gen.h.in_check"],
+    cmd: "echo \"#define DTC_VERSION \\\"DTC $$(cat $(in))-Android-build\\\"\" > $(out)",
+}
+
+// Assert that upstream's version_gen.h.in template still matches the format
+// hardcoded in dtc_version_gen.h above.
+EXPECTED_VERSION_GEN_H_IN = "#define DTC_VERSION \"DTC @VCS_TAG@\""
+
+genrule {
+    name: "dtc_version_gen.h.in_check",
+    out: ["version_gen.h.in.check"],
     srcs: ["version_gen.h.in"],
-    tool_files: [
-        "METADATA",
-        "METADATA_version.sed",
-    ],
-    cmd: "version=$$(" +
-        "sed -f $(location METADATA_version.sed) -n $(location METADATA)" +
-        ")-Android-build;" +
-        "sed s/@VCS_TAG@/$${version}/ $(in) > $(out)",
+    cmd: "[ \"$$(cat $(in))\" = '" + EXPECTED_VERSION_GEN_H_IN + "' ] && touch $(out)",
 }
 
 dirgroup {

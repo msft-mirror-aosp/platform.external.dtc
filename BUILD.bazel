@@ -47,24 +47,18 @@ UTILS = [
     ":version_gen_header",
 ]
 
+# Rely on the check in Android.bp and build tests to catch any change in the
+# format of version_gen.h.in.
 genrule(
     name = "version_gen_header",
-    srcs = [
-        "METADATA",
-        "METADATA_version.sed",
-        "version_gen.h.in",
-    ],
+    srcs = ["VERSION.txt"],
     outs = ["version_gen.h"],
     cmd = """
         # Avoid accessing host tools.
         export PATH=
-        version="$$($(execpath @kleaf//build/kernel/kleaf/bootstrap_hermetic_tools:sed) \\
-            -f $(location METADATA_version.sed) \\
-            -n $(location METADATA))-Android-build"
-        $(execpath @kleaf//build/kernel/kleaf/bootstrap_hermetic_tools:sed) \\
-            s/@VCS_TAG@/$${version}/ $(location version_gen.h.in) > $@
+        read -r version < $<
+        echo "#define DTC_VERSION \\"DTC $${version}-Android-build\\"" > $@
     """,
-    tools = ["@kleaf//build/kernel/kleaf/bootstrap_hermetic_tools:sed"],
 )
 
 cc_binary(
