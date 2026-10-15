@@ -1,7 +1,9 @@
-trees = static_library('trees', files('trees.S'), c_args: '-D__ASSEMBLY__',
+trees = static_library('trees', files('trees.S'),
+                       build_by_default: false,
                        include_directories: libfdt_inc)
 
 dumptrees = executable('dumptrees', files('dumptrees.c'),
+                       build_by_default: false,
                        link_with: trees, dependencies: libfdt_dep)
 
 dumptrees_dtb = custom_target(
@@ -94,23 +96,23 @@ tests += [
   'truncated_memrsv',
   'truncated_property',
   'truncated_string',
+  'unterminated_memrsv',
 ]
 
+test_deps = [testutil_dep, util_dep, libfdt_dep]
+
 dl = cc.find_library('dl', required: false)
-if dl.found() and not static_build
+if dl.found()
   tests += [
     'asm_tree_dump',
     'value-labels',
   ]
-endif
-
-test_deps = [testutil_dep, util_dep, libfdt_dep]
-if not static_build
   test_deps += [dl]
 endif
 
+tests_exe = []
 foreach t: tests
-  executable(t, files(t + '.c'), dependencies: test_deps, link_args: extra_link_args)
+  tests_exe += executable(t, files(t + '.c'), dependencies: test_deps, build_by_default: false)
 endforeach
 
 run_tests = find_program('run_tests.sh')
@@ -120,19 +122,43 @@ if not py.found()
   env += 'NO_PYTHON=1'
 else
   env += [
-    'PYTHON=' + py.path(),
-    'PYTHONPATH=' + meson.source_root() / 'pylibfdt',
+    'PYTHON=' + py.full_path(),
+    'PYTHONPATH=' + meson.project_source_root() / 'pylibfdt',
+    'NO_PYTHON=0',
   ]
 endif
 if not yaml.found()
   env += 'NO_YAML=1'
+else
+  env += 'NO_YAML=0'
 endif
 
-test(
-  'run-test',
-  run_tests,
-  workdir: meson.current_build_dir(),
-  depends: dumptrees_dtb,
-  env: env,
-  timeout: 1800, # mostly for valgrind
-)
+run_test_types = [
+  'libfdt',
+  'utilfdt',
+  'dtc',
+  'dtbs_equal',
+  'fdtget',
+  'fdtput',
+  'fdtdump',
+  'fdtoverlay'
+]
+run_test_deps = [
+  dtc_tools, dumptrees_dtb, tests_exe
+]
+if pylibfdt_enabled
+  run_test_types += 'pylibfdt'
+  run_test_deps += pylibfdt
+endif
+foreach test_type : run_test_types
+  test(
+    test_type,
+    run_tests,
+    args: ['-t', test_type],
+    is_parallel: false,
+    workdir: meson.current_build_dir(),
+    depends: run_test_deps,
+    env: env,
+    timeout: 1800, # mostly for valgrind
+  )
+endforeach

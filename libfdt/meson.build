@@ -16,46 +16,48 @@ sources = files(
   'fdt_wip.c',
 )
 
+link_args = []
+if cc.has_link_argument('-Wl,--no-undefined')
+    link_args += '-Wl,--no-undefined'
+else
+    # -undefined error is the equivalent of --no-undefined for the macOS linker,
+    # but -undefined would also be understood as a valid argument for GNU ld!
+    link_args += cc.get_supported_link_arguments('-Wl,-undefined,error')
+endif
+
+link_args += version_script
 libfdt = library(
   'fdt', sources,
-  version: '1.6.0',
-  link_args: ['-Wl,--no-undefined', version_script],
+  version: meson.project_version(),
+  link_args: link_args,
   link_depends: 'version.lds',
-  install: true,
-)
-
-libfdt_a = static_library(
-  'fdt', sources,
-  install: true,
+  install: get_option('default_library') != 'static' or not wheel_only,
 )
 
 libfdt_inc = include_directories('.')
 
-if static_build
-  link_with = libfdt_a
-else
-  link_with = libfdt
-endif
-
 libfdt_dep = declare_dependency(
   include_directories: libfdt_inc,
-  link_with: link_with,
+  link_with: libfdt,
 )
+meson.override_dependency('libfdt', libfdt_dep)
 
-install_headers(
-  files(
-    'fdt.h',
-    'libfdt.h',
-    'libfdt_env.h',
+if not wheel_only
+  install_headers(
+    files(
+      'fdt.h',
+      'libfdt.h',
+      'libfdt_env.h',
+    )
   )
-)
 
-pkgconfig = import('pkgconfig')
+  pkgconfig = import('pkgconfig')
 
-pkgconfig.generate(
-  libraries: libfdt,
-  version: meson.project_version(),
-  filebase: 'libfdt',
-  name: 'libfdt',
-  description: 'Flat Device Tree manipulation',
-)
+  pkgconfig.generate(
+    libraries: libfdt,
+    version: meson.project_version(),
+    filebase: 'libfdt',
+    name: 'libfdt',
+    description: 'Flat Device Tree manipulation',
+  )
+endif

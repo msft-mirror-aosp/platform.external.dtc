@@ -191,6 +191,8 @@ int fdt_num_mem_rsv(const void *fdt)
 	int i;
 	const struct fdt_reserve_entry *re;
 
+	FDT_RO_PROBE(fdt);
+
 	for (i = 0; (re = fdt_mem_rsv(fdt, i)) != NULL; i++) {
 		if (fdt64_ld_(&re->size) == 0)
 			return i;
@@ -306,8 +308,8 @@ const char *fdt_get_name(const void *fdt, int nodeoffset, int *len)
 	const char *nameptr;
 	int err;
 
-	if (((err = fdt_ro_probe_(fdt)) < 0)
-	    || ((err = fdt_check_node_offset_(fdt, nodeoffset)) < 0))
+	if (!can_assume(VALID_DTB) && (((err = fdt_ro_probe_(fdt)) < 0)
+	    || ((err = fdt_check_node_offset_(fdt, nodeoffset)) < 0)))
 			goto fail;
 
 	nameptr = nh->name;
@@ -555,6 +557,17 @@ const char *fdt_get_alias_namelen(const void *fdt,
 const char *fdt_get_alias(const void *fdt, const char *name)
 {
 	return fdt_get_alias_namelen(fdt, name, strlen(name));
+}
+
+const char *fdt_get_symbol_namelen(const void *fdt,
+				   const char *name, int namelen)
+{
+	return fdt_path_getprop_namelen(fdt, "/__symbols__", name, namelen, NULL);
+}
+
+const char *fdt_get_symbol(const void *fdt, const char *name)
+{
+	return fdt_get_symbol_namelen(fdt, name, strlen(name));
 }
 
 int fdt_get_path(const void *fdt, int nodeoffset, char *buf, int buflen)
