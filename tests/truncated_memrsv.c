@@ -15,9 +15,12 @@
 #include "tests.h"
 #include "testdata.h"
 
+#define SPACE		65536
+
 int main(int argc, char *argv[])
 {
 	void *fdt = &truncated_memrsv;
+	void *buf;
 	int err;
 	uint64_t addr, size;
 
@@ -44,6 +47,12 @@ int main(int argc, char *argv[])
 	err = fdt_get_mem_rsv(fdt, 1, &addr, &size);
 	if (err != -FDT_ERR_BADOFFSET)
 		FAIL("fdt_get_mem_rsv(1) returned %d instead of -FDT_ERR_BADOFFSET",
+		     err);
+
+	buf = xmalloc(SPACE);
+	err = fdt_open_into(fdt, buf, SPACE);
+	if (err != -FDT_ERR_TRUNCATED)
+		FAIL("fdt_open_into() returned %d instead of -FDT_ERR_TRUNCATED",
 		     err);
 
 	PASS();

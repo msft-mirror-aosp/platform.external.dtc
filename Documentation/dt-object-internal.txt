@@ -6,7 +6,7 @@ the hardware capabilities. This is insufficient for platforms
 that need to dynamically insert Device Tree fragments into the
 live tree.
 
-This document explains the the Device Tree object format and
+This document explains the Device Tree object format and
 modifications made to the Device Tree compiler, which make it possible.
 
 1. Simplified Problem Definition
@@ -35,7 +35,7 @@ We have a number of peripherals that after probing (using some undefined method)
 should result in different Device Tree configuration.
 
 We cannot boot with this static tree because due to the configuration of the
-foo platform there exist multiple conficting peripherals DT fragments.
+foo platform there exist multiple conflicting peripherals DT fragments.
 
 So for the bar peripheral we would have this:
 

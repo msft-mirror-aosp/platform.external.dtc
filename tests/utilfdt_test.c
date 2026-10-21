@@ -46,11 +46,11 @@ static void checkfail(const char *fmt)
  * Add the given modifier to each of the valid sizes, and check that we get
  * correct values.
  *
- * \param modifier	Modifer string to use as a prefix
+ * \param modifier	Modifier string to use as a prefix
  * \param expected_size	The size (in bytes) that we expect (ignored for
  *			strings)
  */
-static void check_sizes(char *modifier, int expected_size)
+static void check_sizes(const char *modifier, int expected_size)
 {
 	char fmt[10], *ptr;
 
